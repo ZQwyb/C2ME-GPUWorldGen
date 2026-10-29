@@ -1,0 +1,43 @@
+# MC PerlinNoise 2D 精确算法（开发机对拍 20 万点/20 种子，maxAbsDiff=0.0）
+# 来源：反编译 minecraft-merged 26.3，对拍真值 = net.minecraft.world.level.levelgen.synth.PerlinNoise
+
+## 构造（RandomSource r）
+- ox = r.nextDouble()*256.0; oy = r.nextDouble()*256.0; oz = r.nextDouble()*256.0
+- perms[256] = identity; for i in 0..255: j = i + r.nextInt(256-i); swap(perms[i],perms[j])
+- permute(i) = (perms[i & 255] & 255)
+
+## wrap(x)（|x| < HALF_ROUND≈1.677e7 时不动）
+- else: x - 33554432.0 * floor(x/33554432.0 + 0.5)
+
+## GRAD 表（16 个，gradDot(h,dx,dy,dz)=GRAD[h&15].x*dx + .y*dy + .z*dz）
+GRAD = [
+ ( 1, 1, 0),(-1, 1, 0),( 1,-1, 0),(-1,-1, 0),
+ ( 1, 0, 1),(-1, 0, 1),( 1, 0,-1),(-1, 0,-1),
+ ( 0, 1, 1),( 0,-1, 1),( 0, 1,-1),( 0,-1,-1),
+ ( 1, 1, 0),( 0,-1, 1),(-1, 1, 0),( 0,-1,-1)
+]
+
+## 2D get(x,z)  ===  get(wrap(x), 0.0, wrap(z))
+- x0 = wrap(x) + ox;  y0 = oy;  z0 = wrap(z) + oz
+- xi=floor(x0), yi=floor(y0), zi=floor(z0)
+- xf=(float)(x0-xi), yf=(float)(y0-yi), zf=(float)(z0-zi)   # 注意 yf 不是 0！
+- 8 角梯度：
+  c000=gradDot(permute(permute(permute(xi)   +yi)+zi   , xf   , yf   , zf   )
+  c100=gradDot(permute(permute(permute(xi+1) +yi)+zi   , xf-1 , yf   , zf   )
+  c010=gradDot(permute(permute(permute(xi)   +yi+1)+zi , xf   , yf-1 , zf   )
+  c110=gradDot(permute(permute(permute(xi+1) +yi+1)+zi , xf-1 , yf-1 , zf   )
+  c001=gradDot(permute(permute(permute(xi)   +yi)+zi+1 , xf   , yf   , zf-1 )
+  c101=gradDot(permute(permute(permute(xi+1) +yi)+zi+1 , xf-1 , yf   , zf-1 )
+  c011=gradDot(permute(permute(permute(xi)   +yi+1)+zi+1, xf   , yf-1 , zf-1 )
+  c111=gradDot(permute(permute(permute(xi+1) +yi+1)+zi+1, xf-1 , yf-1 , zf-1 )
+- u=smoothstep(xf), v=smoothstep(yf), w=smoothstep(zf)
+  smoothstep(t)=t*t*t*(t*(t*6-15)+10)   # 与我们 kernel 的 dd_fade 一致
+- result = lerp3(u,v,w, c000,c100,c010,c110,c001,c101,c011,c111)
+  lerp3: 先沿 x 两两 lerp(u)，再沿 y lerp(v)，最后沿 z lerp(w)
+
+## 集成要点
+- mixin 钩子：PerlinNoise.get(double x, double z)（2D 生物群系噪声）
+- 从真实实例读 perms(256 byte) + ox/oy/oz 上传 GPU
+- 宿主侧先算 x0=wrap(x)+ox 等大坐标（用 double-double 精度，这是 GPU 价值点），
+  把 xi/yi/zi 和 xf/yf/zf 喂给 GPU；GPU 只做 hash+grad+三线性 lerp
+- 影子模式：永远返回 MC 原值，只旁路比对 GPU 结果 + 计时

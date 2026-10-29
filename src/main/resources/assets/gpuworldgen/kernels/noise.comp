@@ -1,0 +1,153 @@
+// GPU WorldGen — double-double 精度 2D Perlin 噪声 (Vulkan Compute)
+// 目标设备：Adreno 830（无 FP64 硬件，用两个 FP32 模拟 ~42 位精度）
+// 与 Java 侧 CpuNoise2D 算法完全一致（noise.cl 的 Vulkan 移植版）
+#version 450
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, set = 0, binding = 0) readonly buffer PermBlock  { int perm[]; };
+layout(std430, set = 0, binding = 1) readonly buffer InBlock    { float inData[]; };
+layout(std430, set = 0, binding = 2) writeonly buffer OutBlock  { float outData[]; };
+
+layout(push_constant) uniform PC {
+    int freq;
+    int count;
+} pc;
+
+struct dd { float hi; float lo; };
+
+// ---- 基础精确运算（Dekker / Knuth / Shewchuk），与 noise.cl 一致 ----
+
+// 精确求和：s = a + b（FP32 全精度捕获）
+void two_sum(float a, float b, out dd s) {
+    float sum = a + b;
+    float bb  = sum - a;
+    float err = (a - (sum - bb)) + (b - bb);
+    s.hi = sum;
+    s.lo = err;
+}
+
+// 精确乘积：p = a * b（借助 fma，捕获完整舍入误差；Vulkan 保证 fma 为 fused）
+void two_prod(float a, float b, out dd p) {
+    float prod = a * b;
+    float err  = fma(a, b, -prod);
+    p.hi = prod;
+    p.lo = err;
+}
+
+dd dd_add(dd a, dd b) {
+    dd s;
+    two_sum(a.hi, b.hi, s);
+    float e = a.lo + b.lo + s.lo;
+    dd r;
+    two_sum(s.hi, e, r);
+    return r;
+}
+
+dd dd_sub(dd a, dd b) {
+    dd nb;
+    nb.hi = -b.hi;
+    nb.lo = -b.lo;
+    return dd_add(a, nb);
+}
+
+dd dd_mul(dd a, dd b) {
+    dd p;
+    two_prod(a.hi, b.hi, p);
+    p.lo += a.hi * b.lo + a.lo * b.hi;
+    dd r;
+    two_sum(p.hi, p.lo, r);
+    return r;
+}
+
+dd dd_mul_s(dd a, float s) {
+    dd b;
+    two_prod(a.hi, s, b);
+    b.lo += a.lo * s;
+    dd r;
+    two_sum(b.hi, b.lo, r);
+    return r;
+}
+
+dd mk_dd(float hi, float lo) {
+    dd r;
+    r.hi = hi;
+    r.lo = lo;
+    return r;
+}
+
+dd dd_neg(dd a) {
+    dd r;
+    r.hi = -a.hi;
+    r.lo = -a.lo;
+    return r;
+}
+
+float fade(float t) {
+    return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+}
+
+dd dd_fade(dd t) {
+    // t^3 * (t*(t*6-15)+10)，全部用 dd
+    dd t6 = dd_mul_s(t, 6.0);
+    dd c  = dd_add(t6, mk_dd(-15.0, 0.0));
+    dd tt = dd_mul(t, c);
+    dd p  = dd_add(tt, mk_dd(10.0, 0.0));
+    dd t2 = dd_mul(t, t);
+    dd t3 = dd_mul(t2, t);
+    return dd_mul(t3, p);
+}
+
+dd dd_lerp(dd t, dd a, dd b) {
+    dd d  = dd_sub(b, a);
+    dd td = dd_mul(t, d);
+    return dd_add(a, td);
+}
+
+dd dd_grad(int hash, dd x, dd y) {
+    int h = hash & 7;
+    dd u = (h < 4) ? x : y;
+    dd v = (h < 4) ? y : x;
+    dd gu = ((h & 1) == 0) ? u : dd_neg(u);
+    dd gv = ((h & 2) == 0) ? v : dd_neg(v);
+    return dd_add(gu, gv);
+}
+
+// ---- 2D Perlin（与 Java CpuNoise2D.noise 完全对应）----
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    if (int(i) >= pc.count) return;
+
+    dd x = mk_dd( inData[int(i) * 4 + 0],  inData[int(i) * 4 + 1]);
+    dd y = mk_dd( inData[int(i) * 4 + 2],  inData[int(i) * 4 + 3]);
+
+    // sx = x * freq, sy = y * freq（dd 域内乘法，保持精度）
+    dd sx = dd_mul_s(x, float(pc.freq));
+    dd sy = dd_mul_s(y, float(pc.freq));
+
+    // 整数部分与小数部分（dd 域内分解）
+    int xi = int(floor(sx.hi));
+    int yi = int(floor(sy.hi));
+    dd xf = dd_sub(sx, mk_dd(float(xi), 0.0));
+    dd yf = dd_sub(sy, mk_dd(float(yi), 0.0));
+
+    dd u = dd_fade(xf);
+    dd v = dd_fade(yf);
+
+    int X = xi & 255;
+    int Y = yi & 255;
+    int h00 = perm[perm[X] + Y];
+    int h10 = perm[perm[X + 1] + Y];
+    int h01 = perm[perm[X] + Y + 1];
+    int h11 = perm[perm[X + 1] + Y + 1];
+
+    dd xm = dd_sub(xf, mk_dd(1.0, 0.0));
+    dd ym = dd_sub(yf, mk_dd(1.0, 0.0));
+
+    dd x1 = dd_lerp(u, dd_grad(h00, xf, yf), dd_grad(h10, xm, yf));
+    dd x2 = dd_lerp(u, dd_grad(h01, xf, ym), dd_grad(h11, xm, ym));
+    dd res = dd_lerp(v, x1, x2);
+
+     outData[int(i) * 2 + 0] = res.hi;
+     outData[int(i) * 2 + 1] = res.lo;
+}
