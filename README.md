@@ -80,4 +80,4 @@ export JAVA_HOME=/path/to/jdk-25
 
 ---
 
-**免责声明**：本项目为独立 mod，与 C2ME（C2ME-Fabric）官方项目无隶属关系，仅命名致敬。引用 MC 类名用于适配，不打包分发 Minecraft 本体。
+**免责声明**：本项目为独立 mod，与 C2ME（C2ME-Fabric）官方项目无隶属关系，仅命名致敬。引用 MC 类名用于适配，不打包分发 Minecraft 本体，本项目基本由AI编写代码
