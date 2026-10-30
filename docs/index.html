@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>C2ME-GPUWorldGen</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,sans-serif}
+body{background:#111827;color:#e5e7eb;padding:24px;max-width:900px;margin:0 auto}
+header{text-align:center;margin-bottom:32px}
+h1{color:#38bdf8;margin-bottom:8px;font-size:28px}
+.sub{color:#9ca3af;margin-bottom:16px}
+.card{background:#1f2937;border-radius:12px;padding:20px;margin-bottom:16px}
+h2{color:#38bdf8;margin-bottom:12px;font-size:20px}
+p{line-height:1.6;margin-bottom:10px;color:#d1d5db}
+a{color:#38bdf8;text-decoration:none}
+a:hover{text-decoration:underline}
+ul{padding-left:20px;margin:10px 0}
+li{margin:6px 0;color:#d1d5db}
+footer{margin-top:40px;text-align:center;color:#9ca3af}
+</style>
+</head>
+<body>
+<header>
+<h1>C2ME-GPUWorldGen</h1>
+<p class="sub">手机端 Minecraft Java 版 GPU 加速世界生成模组</p>
+</header>
+
+<div class="card">
+<h2>介绍</h2>
+<p>为骁龙8 Elite（Adreno 830）手机适配，基于 Fabric，给 C2ME 增加真正 GPU 噪声世界生成。</p>
+<p>当前处于开发验证阶段，解决远距离坐标 float 精度丢失、影子模式、噪声接管等问题。</p>
+</div>
+
+<div class="card">
+<h2>信息</h2>
+<ul>
+<li>目标版本：Minecraft Java 26.3 / Fabric</li>
+<li>许可证：MIT</li>
+<li>仓库：<a href="https://github.com/ZQwyb/C2ME-GPUWorldGen">github.com/ZQwyb/C2ME-GPUWorldGen</a></li>
+</ul>
+</div>
+
+<div class="card">
+<h2>版本进度</h2>
+<ul>
+<li>v0.8.6：影子模式验收通过</li>
+<li>v0.9.0：double-double 高精度坐标，解决远距离小数丢失</li>
+<li>v0.10.1：GPU噪声接管修复</li>
+</ul>
+</div>
+
+<footer>
+<p>© 2026 ZQ-斩情</p>
+</footer>
+</body>
+</html>
