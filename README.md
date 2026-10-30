@@ -1,4 +1,4 @@
-# C2ME-GPUWorldGen
+# M¹B-GPUWorldGen
 
 为 **Minecraft Java 版（手机端）** 实现真正 GPU 加速世界生成的 Fabric 适配 mod。
 
@@ -74,7 +74,7 @@ export JAVA_HOME=/path/to/jdk-25
 
 ## 协议
 
-<div align="center">Mod 采用 MIT 协议C2ME 兼容</div>
+<div align="center">Mod 采用 MIT 协议</div>
 
 <div align="center">© 2026 ZQ-斩情</div>
 
